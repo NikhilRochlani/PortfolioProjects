@@ -1,0 +1,255 @@
+---
+title: 'Module 4 Assignment: Logistic Regression'
+author: "Nikhil Rochlani"
+date: "05/02/2022"
+output:
+  html_document:
+    theme: lumen
+    toc: true
+    toc_float: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, comment=" ", include=FALSE}
+pacman::p_load("dplyr", "ggplot2", "Hmisc", "stringr","psych", "gmodels", "ggcorrplot", "broom", "gtools", "gbutils","TOC", "magrittr","car", "effects", "stargazer", "jtools")
+
+```
+
+```{r, include=FALSE}
+data_log <-read.csv("AmesHousing.csv", header = T, sep = ",")
+
+```
+## Summary Table:
+
+This summary table includes summary statistics for all relevant continous variables.
+```{r, include=FALSE}
+data_log_df<-data_log %>%
+  dplyr::select(SalePrice, Lot.Frontage, Lot.Area, Overall.Qual, Overall.Cond, Mas.Vnr.Area,BsmtFin.SF.1, BsmtFin.SF.2, Bsmt.Unf.SF, Total.Bsmt.SF, X1st.Flr.SF, X2nd.Flr.SF,Gr.Liv.Area, TotRms.AbvGrd, Garage.Area, Wood.Deck.SF, Open.Porch.SF, Pool.Area)
+```
+```{r, comment= " "}
+psych::describe(data_log_df, skew = F) 
+
+```
+
+
+## Logistic Regression:
+
+### Introduction:
+
+Logistic Regression is used widely to solve the classification problems in Machine Learning. Basically Logistic Regression is implied when the response variable is a binary, For example: yes or no, rich or poor, etc.
+
+**Linear Regression v/s Logistic Regression:**
+
+Basically these both terms take the continous and discrete variables as the predictors.
+But,
+-> Linear Regression predicts continous variables and the logistic regression predicts the binary variable.
+
+-> The best fit line in terms of linear regression is a straight line and the best fit line in terms of logistic regression is S- shaped line which is called a "Squiggle"
+
+-> The best fit line is determined by least squares approach in the Linear Regression and Maximum likelihood estimation is used to derive best-fit line in the Logistic Regression.
+
+### Interpretation of Logistic Regression:
+
+Basically there are three scales on which the coefficients of logistic regression can be interpreted that are,
+
+Proabability scale:
+
+It's easy to interpret on scale of 0 or 1. But its function is non-linear
+
+Odds Scale:
+
+It's hard to interpret and its function is exponential.
+
+Log Odds Scale:
+
+It's impossible to interpret but its function is linear. 
+
+### Logistic Regression Model: 
+
+Here In this model first we are going to create a binary variable by partitioning the houses which have price more than 200000 dollars and less than it.
+
+Then we are going to select some relevant variables which can be from the interior, exterior or built year of the house. In this model I have selected certain set of variables which are
+
+Interior: General Living area, fireplaces and first floor square-feet 
+
+Exterior: Overall Quality of house 
+
+Year : Built year and year of remodification in the house.
+
+
+```{r, comment= " "}
+summary(data_log$SalePrice)
+data_log$sp <- ifelse(data_log$SalePrice > 200000, 1,0)
+table(data_log$sp)
+```
+
+## Ineterpretation of the Model:
+
+First of all we need to select a particular scale on which we can go ahead and bring out some meaningful outcomes from the model.
+
+As one can see the output in the summary of the model the coefficients are on the log of odds scale.
+
+After Exponentiating the coeffiecients which were on log odds scale,
+
+1) The intercept is 1.37 when all the predictors are assumed to be 0
+
+2) With additional one unit increase in fireplaces in the house that is associated with 2.35 * number of fireplaces.
+
+3) With additional one unit increase in first floor square feet in the house that is associated with 1.001 * First floor s.f.
+
+4) With additional one unit increase in General Living area square feet in the house that is associated with 1.003 * Gr.liv area sf.
+
+5) With additional one rating increase in Overall Quality of the house on scale of 1-10 that is associated with 3.16 * Rating(Overall Quality).
+
+**sp = 1.37 + 2.36 * (fireplace) + 1.001 * (X1st.flr.sf) + 1.03 * (year.remod.add) + 3.16 * (Overall Qual) + 1.003 * (Gr.liv.area) +1.022 * (Year built)**
+
+
+
+```{r, comment= " "}
+# table(as.factor(data_log$Exter.Qual))
+
+lo_reg_1 <-glm(sp ~ Overall.Qual+ Fireplaces + Gr.Liv.Area + X1st.Flr.SF + Year.Built + Year.Remod.Add  , family = "binomial", data = data_log) 
+
+summary(lo_reg_1)
+
+
+exp(coef(lo_reg_1))
+
+
+```
+
+### Regression Table with computed Odds Ratio:
+
+Here I have used the stargazer function to create a table with coefficients on the odds scale. Because the interpretation of coefficients on the odds scale is preferable.
+
+
+```{r, comment= " "}
+stargazer_1 <-stargazer(lo_reg_1,odd.ratio = TRUE ,type = "text")
+
+```
+
+### Augmented Logistic Regression Model:
+
+Here I have used Augment function available in the broom package which gives us the fitted values, residual values, hats(used for leverage) and the cooks distance value(used for influence).
+
+Now As we can see the fitted values are on the probability scale, Because while running the comman d I have mentioned that output should be in the format of response variable.
+
+The model has predicted the probabilities do well.
+
+### Conclusion:
+**In this model I had added some of variables from various categories like lot area, kitchen quality, exterior qual, mansion veener area,etc. But I found out that although the other variables were helping me to reduce the AIC score, but the difference in fitted values was much more impacted, So I decided to retain this set of predictor variables in my model to predict the binary variable of the SalePrice**
+
+
+```{r, comment= " "}
+augment_lo_reg_1<- augment(lo_reg_1, type.predict = "response") %>%
+  mutate(.fitted = round(.fitted, 3), .resid = round(.resid, 3),
+         .hat=round(.hat, 3), .cooksd = round(.cooksd, 3),
+         price_hat = round(.fitted))
+
+col_order_1 <- c("sp", ".fitted", ".resid", ".hat", ".cooksd", "price_hat")
+
+augment_lo_reg_1 <- augment_lo_reg_1[, col_order_1]
+augment_lo_reg_1
+
+```
+
+### Confusion Matrix:
+
+Basically we create confusion matrix which is table to see how well our model has predicted the values for the binary variable of the SalePrice.
+
+The price_hat is the rounded value for fitted values. By rounding the fitted values we convert that into a binary decision, So that we can compare it to the response variable.
+
+*Predictions:*
+
+Out of 2930 observations our model predicted that 2106 houses are priced below 200000 dollar and 1972 houses were below 200000 dollars. 
+
+Then our model predicted that 824 houses are priced above 200000 dollars and 723 houses actually did.
+
+Thus we can also compute the prediction percentage for this model
+2695/2930*100 = 91.98%
+
+**The accuracy of prediction of our model is 91.98%**
+
+```{r, comment= " "}
+confusion_matrix <-table(augment_lo_reg_1$sp, augment_lo_reg_1$price_hat)
+
+confusion_matrix
+
+```
+
+## Visualizations :
+
+### SalePrice and Overall Quality[Exterior]:
+
+Basically The best way to visualize the Logistic regression is to fit a S- shaped line which helps us to determine and observe the changing trend of the probability on scale of 0 and 1 with 1 unit change in the predictor variable,
+
+Now In this plot on the X - axis we can see the overall quality of house ranges from 1-10. So as the overall quality of house increases the trend is going towards 1 on y-axis which indicates the house price is more than 200,000 dollars.
+
+**The probability of house being priced more than 200000 increases if the Overall quality of house is more than 7**
+
+```{r, comment= " "}
+plot_1<-ggplot(data_log, aes(x= Overall.Qual, y=sp))+
+  geom_jitter(width = 0, height = 0.05, alpha = 0.05)+scale_x_continuous(breaks = 1:10)
+
+plot_1 + geom_smooth(method = "glm", method.args = list(family="binomial"), se =F, color = "red")
+
+```
+
+
+### Sp and General Living Area [Interior]
+
+In this plot we can observe if the general living area of house in Iowa is more than 2000 square feet than probability of that house being priced more than 200000 increases.
+
+
+```{r}
+plot_2 <- ggplot(data_log, aes(x= Gr.Liv.Area, y=sp))+
+  geom_jitter(width = 0, height = 0.05, alpha = 0.05)
+
+
+plot_2 + geom_smooth(method = "glm", method.args = list(family="binomial"), se =F, color = "blue") + xlab("General living are SF") + ylab("SalePrice: 0 and 1")
+
+```
+
+### SalePrice and Year Built
+
+In this plot we can see an emerging pattern after the year 1980.
+
+```{r, comment= " "}
+plot_3 <- ggplot(data_log, aes(x= Year.Built, y=sp))+
+  geom_jitter(width = 0, height = 0.05, alpha = 0.05)
+
+
+plot_3 + geom_smooth(method = "glm", method.args = list(family="binomial"), se =F, color = "blue") + xlab("Year Built") + ylab("SalePrice: 0 and 1") + xlim(1940, 2010)
+```
+
+### SalePrice and Fire Places
+
+Here we can see that if the house have atleast one fireplace the probability of it being priced more than 200000 increases
+```{r}
+plot_4 <- ggplot(data_log, aes(x= Fireplaces, y=sp))+
+  geom_jitter(width = 0, height = 0.05, alpha = 0.05)
+
+
+plot_4 + geom_smooth(method = "glm", method.args = list(family="binomial"), se =F, color = "blue")
+```
+
+
+### Effect Plots
+
+The effect plots show us how predicted probabilities change when we change our independent variables.
+
+```{r, fig.width= 20}
+plot(allEffects(lo_reg_1))
+
+```
+
+## References:
+
+1) Multiple and Logistic Regression in R [DataCamp]
+
+2) J. (2016, April 22). Visualizing the Effects of Logistic Regression | University of Virginia Library Research Data Services + Sciences. University of Virginia. https://data.library.virginia.edu/visualizing-the-effects-of-logistic-regression/#:%7E:text=Logistic%20regression%20gives%20us%20a,results%20with%20lots%20of%20numbers.&text=These%20kinds%20of%20plots%20are%20called%20%E2%80%9Ceffect%20plots%E2%80%9D.
+
+3)StatQuest: Logistic Regression. (2018, March 5). YouTube. https://www.youtube.com/watch?v=yIYKR4sgzI8&list=PLblh5JKOoLUKxzEP5HA2d-Li7IJkHfXSe
